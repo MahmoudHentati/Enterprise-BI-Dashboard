@@ -1,33 +1,31 @@
-﻿# 📊 Enterprise BI & OLAP Cube Analytics Dashboard
+# 📊 Enterprise End-to-End BI Solution & Analytics Hub
 
+[![SSIS](https://img.shields.io/badge/ETL-Microsoft%20SSIS-512BD4?logo=microsoftsqlserver&logoColor=white)](https://learn.microsoft.com/sql/integration-services/)
+[![SSAS](https://img.shields.io/badge/OLAP%20Cube-Microsoft%20SSAS-CC292B?logo=microsoftsqlserver&logoColor=white)](https://learn.microsoft.com/sql/analysis-services/)
 [![.NET](https://img.shields.io/badge/.NET-8.0%20%2F%209.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![Blazor](https://img.shields.io/badge/Blazor-Web%20App-512BD4?logo=blazor&logoColor=white)](https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor)
-[![SSAS](https://img.shields.io/badge/Microsoft%20SSAS-OLAP%20Cube-CC292B?logo=microsoftsqlserver&logoColor=white)](https://learn.microsoft.com/sql/analysis-services/)
 [![Language](https://img.shields.io/badge/C%23-12-239120?logo=csharp&logoColor=white)](https://learn.microsoft.com/dotnet/csharp/)
 [![Query](https://img.shields.io/badge/Query%20Language-MDX-blue)]()
 
-An end-to-end **Business Intelligence & Executive Analytics Solution** that bridges **SQL Server Analysis Services (SSAS) OLAP Multidimensional Cubes** with an interactive **Blazor Web Dashboard** via a high-performance **ASP.NET Core REST API**.
+A complete, production-grade **End-to-End Business Intelligence & Data Warehousing Architecture** containing the full lifecycle:
+1. **ETL Data Pipeline (SSIS):** Extracts, transforms, and populates dimensional & fact tables (`SSIS_ETL/`).
+2. **Multidimensional OLAP Cube (SSAS):** Pre-aggregated dimensional modeling with hierarchies and measures (`SSAS_OLAP_Cube/`).
+3. **RESTful Query API (ASP.NET Core):** Translates business queries into MDX and interfaces via ADOMD.NET (`EntrepriseDashboard/`).
+4. **Interactive Executive Dashboard (Blazor):** Dynamic KPI cards, trend charts, and multidimensional analysis (`EntrepriseDashboardFront/`).
 
 ---
 
-## 🏛️ Architecture Overview
+## 🏛️ End-to-End Architecture
 
-`mermaid
+```mermaid
 graph LR
-    subgraph Storage & OLAP Layer
-        DW[(Data Warehouse)] --> Cube[SSAS Multidimensional Cube\n'EnterpriseCube']
-    end
-
-    subgraph Backend API Layer
-        Cube -->|MDX Queries| Service[CubeAnalysisService\nADOMD.NET]
-        Service --> Controller[REST API Controllers\n/api/cube/*]
-    end
-
-    subgraph Presentation Layer
-        Controller -->|JSON over HTTP| BlazorApp[Blazor Interactive Web App\nComponents & Chart Analytics]
-        BlazorApp --> User((Business Analyst / Executive))
-    end
-`
+    Source[(Transactional DB)] -->|SSIS ETL Workflows\nDimensions.dtsx & Facts.dtsx| DW[(Enterprise DW)]
+    DW -->|Dimensional Modeling| Cube[SSAS OLAP Cube\nCustomers, Products, DimDate]
+    Cube -->|MDX MultiDimensional Queries| Service[CubeAnalysisService\nADOMD.NET]
+    Service --> Controller[ASP.NET Core REST API\n/api/cube/*]
+    Controller -->|JSON over HTTP| BlazorApp[Blazor Interactive Web App\nComponents & Chart Analytics]
+    BlazorApp --> User((Business Analyst / Executive))
+```
 
 ---
 
