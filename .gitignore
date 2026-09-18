@@ -1,0 +1,40 @@
+﻿## Visual Studio & .NET GitIgnore
+.vs/
+.vscode/
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.dbmdl
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]uild/
+bld/
+[Bb]in/
+[Oo]bj/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.slnLaunch.user
+*.7z
+
+# Blazor / Web artifacts
+wwwroot/_framework/
+wwwroot/css/bootstrap/bootstrap.min.css.map

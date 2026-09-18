@@ -1,0 +1,171 @@
+<nav class="sidebar">
+    <div class="sidebar-header">
+        <div class="logo-icon">📊</div>
+        <div class="logo-text">
+            <span class="logo-title">EnterpriseCube</span>
+            <span class="logo-sub">Dashboard</span>
+        </div>
+    </div>
+
+    <div class="sidebar-menu">
+        <div class="sidebar-section">
+            <span class="section-label">📋 Accueil</span>
+            <NavLink class="nav-item" href="/" Match="NavLinkMatch.All">
+                <span class="nav-icon">🏠</span>
+                <span class="nav-label">Vue Générale</span>
+            </NavLink>
+            <NavLink class="nav-item" href="/stock">
+                <span class="nav-icon">📦</span>
+                <span class="nav-label">Gestion des Stocks</span>
+            </NavLink>
+        </div>
+
+        <div class="sidebar-section">
+            
+            <NavLink class="nav-item" href="/customers">
+                <span class="nav-icon">👤</span>
+                <span class="nav-label">Clients</span>
+            </NavLink>
+            <NavLink class="nav-item" href="/products">
+                <span class="nav-icon">📦</span>
+                <span class="nav-label">Produits</span>
+            </NavLink>
+        </div>
+    </div>
+
+    <div class="sidebar-footer">
+        <span style="font-size:0.75rem; color:#94a3b8;">© 2026 EnterpriseCube</span>
+    </div>
+</nav>
+
+<style>
+    .sidebar {
+        height: 100vh;
+        background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+        display: flex;
+        flex-direction: column;
+        padding: 1rem 0;
+        color: white;
+        box-shadow: 2px 0 8px rgba(0,0,0,0.2);
+    }
+
+    .sidebar-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .logo-icon {
+        font-size: 1.75rem;
+        min-width: 40px;
+        text-align: center;
+    }
+
+    .logo-text {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .logo-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #60a5fa;
+        letter-spacing: 0.5px;
+    }
+
+    .logo-sub {
+        font-size: 0.7rem;
+        color: #94a3b8;
+        font-weight: 500;
+    }
+
+    .sidebar-menu {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.5rem 0;
+    }
+
+    .sidebar-section {
+        margin-bottom: 1.5rem;
+        padding: 0 0.5rem;
+    }
+
+    .section-label {
+        display: block;
+        font-size: 0.75rem;
+        color: #94a3b8;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 0 1rem 0.75rem;
+        margin-top: 0.5rem;
+    }
+
+    .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.7rem 1rem;
+        margin: 0.3rem 0.5rem;
+        border-radius: 8px;
+        color: #cbd5e1;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+    }
+
+    .nav-item:hover {
+        background: rgba(96,165,250,0.15);
+        color: #60a5fa;
+        transform: translateX(4px);
+    }
+
+    .nav-item.active {
+        background: linear-gradient(90deg, rgba(99,102,241,0.2), rgba(59,130,246,0.1));
+        color: #60a5fa;
+        border-left: 3px solid #60a5fa;
+        padding-left: calc(1rem - 3px);
+    }
+
+    .nav-icon {
+        font-size: 1.1rem;
+        min-width: 24px;
+        text-align: center;
+    }
+
+    .nav-label {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .sidebar-footer {
+        padding: 1rem;
+        border-top: 1px solid rgba(255,255,255,0.1);
+        text-align: center;
+        color: #64748b;
+    }
+
+    /* Scrollbar styling */
+    .sidebar-menu::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .sidebar-menu::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .sidebar-menu::-webkit-scrollbar-thumb {
+        background: rgba(96,165,250,0.3);
+        border-radius: 3px;
+    }
+
+    .sidebar-menu::-webkit-scrollbar-thumb:hover {
+        background: rgba(96,165,250,0.5);
+    }
+</style>

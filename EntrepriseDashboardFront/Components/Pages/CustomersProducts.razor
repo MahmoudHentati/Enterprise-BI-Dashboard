@@ -1,0 +1,334 @@
+﻿@page "/customers-products"
+@rendermode InteractiveServer
+@inject DashboardService DashboardSvc
+@using System.Globalization
+@using EntrepriseDashboardFront.Models
+
+<PageTitle>Clients & Produits — EnterpriseCube</PageTitle>
+
+<div class="top-bar-controls">
+    <span class="section-title">👑 Clients &amp; 📦 Produits</span>
+    <div class="n-control">
+        <label for="topNInput" class="n-label">Afficher le Top :</label>
+        <input id="topNInput" type="number" class="n-input" @bind-value="TopN" @bind-value:event="oninput" min="1" max="100" />
+        <button class="n-btn" @onclick="LoadData">Actualiser</button>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <span class="loading-text">Chargement des données clients & produits...</span>
+    </div>
+}
+else
+{
+    <!-- Overview KPIs -->
+    <div class="kpi-grid" style="margin-bottom: 1.5rem;">
+        <div class="kpi-card kpi-revenue">
+            <div class="kpi-header">
+                <span class="kpi-label">CA Premier Client</span>
+                <div class="kpi-icon">👑</div>
+            </div>
+            <div class="kpi-value">@FormatCurrency(_topCustomers.FirstOrDefault()?.Revenue ?? 0)</div>
+            <div class="kpi-sub">@(_topCustomers.FirstOrDefault()?.CustomerName ?? "Aucun client")</div>
+        </div>
+
+        <div class="kpi-card kpi-paid">
+            <div class="kpi-header">
+                <span class="kpi-label">CA Premier Produit</span>
+                <div class="kpi-icon">⭐</div>
+            </div>
+            <div class="kpi-value">@FormatCurrency(_topProducts.FirstOrDefault()?.Revenue ?? 0)</div>
+            <div class="kpi-sub">@(_topProducts.FirstOrDefault()?.ProductName ?? "Aucun produit")</div>
+        </div>
+
+        <div class="kpi-card kpi-rate">
+            <div class="kpi-header">
+                <span class="kpi-label">Total Commandes du Top</span>
+                <div class="kpi-icon">🛒</div>
+            </div>
+            <div class="kpi-value">@FormatNumber(_topCustomers.Sum(c => c.Orders))</div>
+            <div class="kpi-sub">Commandes passées par le Top @TopN</div>
+        </div>
+
+        <div class="kpi-card kpi-orders">
+            <div class="kpi-header">
+                <span class="kpi-label">Quantité Vendue du Top</span>
+                <div class="kpi-icon">📦</div>
+            </div>
+            <div class="kpi-value">@FormatNumber(_topProducts.Sum(p => p.Quantity))</div>
+            <div class="kpi-sub">Unités vendues pour le Top @TopN</div>
+        </div>
+    </div>
+
+    <!-- Charts Grid -->
+    <div class="charts-grid charts-grid-2" style="margin-bottom: 1.5rem;">
+        <!-- Top Customers Chart -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">🏆 Répartition CA : Top @TopN Clients</span>
+                <span class="chart-badge badge-blue">Clients</span>
+            </div>
+            @if (_topCustomers.Any())
+            {
+                <ApexChart TItem="CustomerSalesDto"
+                           Options="@_customerChartOptions"
+                           Height="280">
+                    <ApexPointSeries TItem="CustomerSalesDto"
+                                     Items="@_topCustomers"
+                                     Name="Chiffre d'Affaires (TND)"
+                                     XValue="@(e => e.CustomerName)"
+                                     YValue="@(e => (decimal)e.Revenue)"
+                                     SeriesType="SeriesType.Bar" />
+                </ApexChart>
+            }
+            else
+            {
+                <div class="loading-text" style="padding:2rem;text-align:center">Aucune donnée</div>
+            }
+        </div>
+
+        <!-- Top Products Chart -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">📦 Répartition CA : Top @TopN Produits</span>
+                <span class="chart-badge badge-violet">Produits</span>
+            </div>
+            @if (_topProducts.Any())
+            {
+                <ApexChart TItem="ProductSalesDto"
+                           Options="@_productChartOptions"
+                           Height="280">
+                    <ApexPointSeries TItem="ProductSalesDto"
+                                     Items="@_topProducts"
+                                     Name="Chiffre d'Affaires (TND)"
+                                     XValue="@(e => e.ProductName)"
+                                     YValue="@(e => (decimal)e.Revenue)"
+                                     SeriesType="SeriesType.Bar" />
+                </ApexChart>
+            }
+            else
+            {
+                <div class="loading-text" style="padding:2rem;text-align:center">Aucune donnée</div>
+            }
+        </div>
+    </div>
+
+    <!-- Detailed Lists Grid -->
+    <div class="charts-grid charts-grid-2">
+        <!-- Customers Table -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">👥 Classement Détaillé des Clients</span>
+                <span class="chart-badge badge-cyan">Top @TopN</span>
+            </div>
+            <div style="overflow-y:auto; max-height:400px;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Nom du Client</th>
+                            <th style="text-align:right">Commandes</th>
+                            <th style="text-align:right">Total CA</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < _topCustomers.Count; i++)
+                        {
+                            var c = _topCustomers[i];
+                            var rank = i + 1;
+                            <tr>
+                                <td class="table-rank">@rank</td>
+                                <td style="font-weight: 500; color: var(--text-primary);">@c.CustomerName</td>
+                                <td class="table-value" style="color: var(--text-secondary);">@c.Orders</td>
+                                <td class="table-value" style="color: #34d399; font-weight: 700;">@FormatCurrency(c.Revenue)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Products Table -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">🛍️ Classement Détaillé des Produits</span>
+                <span class="chart-badge badge-green">Top @TopN</span>
+            </div>
+            <div style="overflow-y:auto; max-height:400px;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Désignation Produit</th>
+                            <th style="text-align:right">Quantité</th>
+                            <th style="text-align:right">Total CA</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < _topProducts.Count; i++)
+                        {
+                            var p = _topProducts[i];
+                            var rank = i + 1;
+                            <tr>
+                                <td class="table-rank">@rank</td>
+                                <td style="font-weight: 500; color: var(--text-primary);">@p.ProductName</td>
+                                <td class="table-value" style="color: var(--text-secondary);">@FormatNumber(p.Quantity)</td>
+                                <td class="table-value" style="color: #34d399; font-weight: 700;">@FormatCurrency(p.Revenue)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .top-bar-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 1rem;
+    }
+
+    .n-control {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .n-label {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        font-weight: 500;
+    }
+
+    .n-input {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 0.4rem 0.8rem;
+        color: var(--text-primary);
+        font-size: 0.85rem;
+        width: 70px;
+        text-align: center;
+        outline: none;
+        transition: all 0.3s ease;
+    }
+
+    .n-input:focus {
+        border-color: var(--accent-violet);
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    .n-btn {
+        background: var(--gradient-primary);
+        border: none;
+        color: white;
+        padding: 0.45rem 1.25rem;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    .n-btn:hover {
+        transform: translateY(-1px);
+        opacity: 0.9;
+    }
+
+    .n-btn:active {
+        transform: translateY(0);
+    }
+</style>
+
+@code {
+    private bool _loading = true;
+    private int TopN { get; set; } = 10;
+    private List<CustomerSalesDto> _topCustomers = [];
+    private List<ProductSalesDto> _topProducts = [];
+
+    private ApexChartOptions<CustomerSalesDto> _customerChartOptions = new()
+    {
+        Chart = new Chart { Background = "transparent", Toolbar = new Toolbar { Show = false } },
+        Theme = new Theme { Mode = Mode.Dark, Palette = PaletteType.Palette1 },
+        Colors = ["#3b82f6"],
+        PlotOptions = new PlotOptions
+        {
+            Bar = new PlotOptionsBar
+            {
+                Horizontal = true,
+                BorderRadius = 4
+            }
+        },
+        Grid = new Grid { BorderColor = "rgba(255,255,255,0.06)", StrokeDashArray = 3 },
+        Xaxis = new XAxis { Labels = new XAxisLabels { Style = new AxisLabelStyle { Colors = "#6b7280", FontSize = "10px" } } },
+        Yaxis = [new YAxis { Labels = new YAxisLabels { Style = new AxisLabelStyle { Colors = "#6b7280", FontSize = "10px" } } }],
+        Tooltip = new Tooltip { Theme = Mode.Dark }
+    };
+
+    private ApexChartOptions<ProductSalesDto> _productChartOptions = new()
+    {
+        Chart = new Chart { Background = "transparent", Toolbar = new Toolbar { Show = false } },
+        Theme = new Theme { Mode = Mode.Dark, Palette = PaletteType.Palette3 },
+        Colors = ["#8b5cf6"],
+        PlotOptions = new PlotOptions
+        {
+            Bar = new PlotOptionsBar
+            {
+                Horizontal = true,
+                BorderRadius = 4
+            }
+        },
+        Grid = new Grid { BorderColor = "rgba(255,255,255,0.06)", StrokeDashArray = 3 },
+        Xaxis = new XAxis { Labels = new XAxisLabels { Style = new AxisLabelStyle { Colors = "#6b7280", FontSize = "10px" } } },
+        Yaxis = [new YAxis { Labels = new YAxisLabels { Style = new AxisLabelStyle { Colors = "#6b7280", FontSize = "10px" } } }],
+        Tooltip = new Tooltip { Theme = Mode.Dark }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        
+        // Ensure N is safe
+        if (TopN <= 0) TopN = 10;
+        if (TopN > 100) TopN = 100;
+
+        var customersTask = DashboardSvc.GetTopCustomersDynamicAsync(TopN);
+        var productsTask = DashboardSvc.GetTopProductsDynamicAsync(TopN);
+
+        await Task.WhenAll(customersTask, productsTask);
+
+        _topCustomers = await customersTask;
+        _topProducts = await productsTask;
+
+        _loading = false;
+    }
+
+    private static string FormatCurrency(decimal value)
+    {
+        if (value >= 1_000_000) return $"{(value / 1_000_000):F2}M TND";
+        if (value >= 1_000) return $"{(value / 1_000):F1}K TND";
+        return $"{value.ToString("N0", new CultureInfo("fr-FR"))} TND";
+    }
+
+    private static string FormatNumber(int value)
+    {
+        if (value >= 1_000_000) return $"{(value / 1_000_000.0):F1}M";
+        if (value >= 1_000) return $"{(value / 1_000.0):F1}K";
+        return value.ToString("N0", CultureInfo.InvariantCulture);
+    }
+}

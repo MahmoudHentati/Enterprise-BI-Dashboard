@@ -1,0 +1,376 @@
+@page "/stock"
+@rendermode InteractiveServer
+@inject DashboardService DashboardSvc
+@using System.Globalization
+@using EntrepriseDashboardFront.Models
+
+<PageTitle>Gestion des Stocks — EnterpriseCube</PageTitle>
+
+@if (_loading)
+{
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <span class="loading-text">Chargement des données de stock...</span>
+    </div>
+}
+else
+{
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+        <div class="kpi-card kpi-revenue">
+            <div class="kpi-header">
+                <span class="kpi-label">Quantité en Stock</span>
+                <div class="kpi-icon">📦</div>
+            </div>
+            <div class="kpi-value">@FormatNumber(_totalQuantity)</div>
+            <div class="kpi-sub">Total des pièces en stock</div>
+        </div>
+
+        <div class="kpi-card kpi-paid">
+            <div class="kpi-header">
+                <span class="kpi-label">Valorisation du Stock</span>
+                <div class="kpi-icon">💶</div>
+            </div>
+            <div class="kpi-value">@FormatCurrency(_totalValuation)</div>
+            <div class="kpi-sub">Valeur estimée du stock</div>
+        </div>
+
+        <div class="kpi-card kpi-rate">
+            <div class="kpi-header">
+                <span class="kpi-label">Articles Catalogués</span>
+                <div class="kpi-icon">🏷️</div>
+            </div>
+            <div class="kpi-value">@_stockProducts.Count</div>
+            <div class="kpi-sub">Produits différents en stock</div>
+        </div>
+
+        <div class="kpi-card kpi-orders">
+            <div class="kpi-header">
+                <span class="kpi-label">Coût Moyen Unitaire</span>
+                <div class="kpi-icon">📈</div>
+            </div>
+            <div class="kpi-value">@FormatCurrency(_avgUnitCost)</div>
+            <div class="kpi-sub">Coût d'acquisition moyen</div>
+        </div>
+    </div>
+
+    <!-- Charts Grid -->
+    <div class="charts-grid charts-grid-2" style="margin-bottom: 1.5rem;">
+        <!-- Movement type bar chart -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">📊 Mouvements par Type</span>
+                <span class="chart-badge badge-blue">Volume</span>
+            </div>
+            @if (_movementTypeData.Any())
+            {
+                <ApexChart TItem="StockMovementTypeDto"
+                           Options="@_movementChartOptions"
+                           Height="260">
+                    <ApexPointSeries TItem="StockMovementTypeDto"
+                                     Items="@_movementTypeData"
+                                     Name="Quantité"
+                                     XValue="@(e => e.MovementType)"
+                                     YValue="@(e => (decimal)e.TotalQuantity)"
+                                     SeriesType="SeriesType.Bar" />
+                </ApexChart>
+            }
+            else
+            {
+                <div class="loading-text" style="padding:2rem;text-align:center">Aucune donnée de mouvement</div>
+            }
+        </div>
+
+        <!-- Monthly trend area chart grouped by movement type -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">📈 Flux de Stock Mensuel</span>
+                <span class="chart-badge badge-violet">Tendance</span>
+            </div>
+            @if (_monthlyStockData.Any())
+            {
+                <ApexChart TItem="MonthlyStockDto"
+                           Options="@_monthlyStockChartOptions"
+                           Height="260">
+                    @foreach (var type in _monthlyStockData.Select(x => x.MovementType).Distinct())
+                    {
+                        <ApexPointSeries TItem="MonthlyStockDto"
+                                         Items="@_monthlyStockData.Where(x => x.MovementType == type).ToList()"
+                                         Name="@type"
+                                         XValue="@(e => $"{GetBriefMonthName(e.MonthName)} {e.Year}")"
+                                         YValue="@(e => (decimal)e.Quantity)"
+                                         SeriesType="SeriesType.Area" />
+                    }
+                </ApexChart>
+            }
+            else
+            {
+                <div class="loading-text" style="padding:2rem;text-align:center">Aucune donnée mensuelle</div>
+            }
+        </div>
+    </div>
+
+    <!-- Stock Data Grid & Filters -->
+    <div class="chart-card" style="margin-bottom: 1.5rem;">
+        <div class="chart-header" style="flex-wrap: wrap; gap: 1rem;">
+            <span class="chart-title">📋 Inventaire détaillé des Produits</span>
+            
+            <!-- Filters -->
+            <div class="filters-container">
+                <input type="text" 
+                       class="search-input" 
+                       placeholder="Rechercher un produit..." 
+                       @bind-value="_searchTerm" 
+                       @bind-value:event="oninput" />
+                
+                <select class="category-select" @bind="_selectedCategory">
+                    <option value="">Toutes les catégories</option>
+                    @foreach (var cat in _categories)
+                    {
+                        <option value="@cat">@cat</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        @{
+            var filteredProducts = GetFilteredProducts();
+        }
+
+        @if (filteredProducts.Any())
+        {
+            <div style="overflow-x:auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Nom du Produit</th>
+                            <th>Catégorie</th>
+                            <th style="text-align:right">Quantité</th>
+                            <th style="text-align:right">Coût Moyen</th>
+                            <th style="text-align:right">Valeur Stock</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{
+                            var maxQty = _stockProducts.Max(p => p.TotalQuantity);
+                            if (maxQty == 0) maxQty = 1;
+                        }
+                        @foreach (var p in filteredProducts)
+                        {
+                            var pct = (double)p.TotalQuantity / maxQty * 100;
+                            var valuation = p.TotalQuantity * p.AvgCost;
+                            <tr>
+                                <td>
+                                    <div style="font-weight: 500; color: var(--text-primary);">@p.ProductName</div>
+                                </td>
+                                <td>
+                                    	<span class="table-badge" style="background: rgba(99,102,241,0.08); color: #4f46e5; border: 1px solid rgba(99,102,241,0.18);">@p.CategoryName</span>
+                                </td>
+                                <td>
+                                    <div class="progress-bar-container">
+                                        <div style="min-width: 35px; text-align: right; font-weight: 600;">@FormatNumber(p.TotalQuantity)</div>
+                                        <div class="progress-bar">
+                                            <div class="progress-bar-fill bar-violet" style="width: @pct.ToString("F0")%"></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="table-value">@FormatCurrency(p.AvgCost)</td>
+                                <td class="table-value" style="color: #10b981; font-weight:700;">@FormatCurrency(valuation)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div style="padding: 3rem; text-align: center; color: var(--text-secondary);">
+                Aucun produit ne correspond à vos critères de recherche.
+            </div>
+        }
+    </div>
+}
+
+<style>
+    .filters-container {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .search-input {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        color: #f8fafc;
+        font-size: 0.82rem;
+        outline: none;
+        min-width: 200px;
+        transition: all 0.25s ease;
+    }
+
+    .search-input:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
+        background: rgba(255,255,255,0.08);
+    }
+
+    .category-select {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        color: #f8fafc;
+        font-size: 0.82rem;
+        outline: none;
+        cursor: pointer;
+        transition: all 0.25s ease;
+    }
+
+    .category-select option {
+        background-color: #1e293b;
+        color: #f8fafc;
+    }
+
+    .category-select:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
+    }
+</style>
+
+@code {
+    private bool _loading = true;
+    private List<StockProductDto> _stockProducts = [];
+    private List<StockMovementTypeDto> _movementTypeData = [];
+    private List<MonthlyStockDto> _monthlyStockData = [];
+    private List<string> _categories = [];
+
+    // Filter properties
+    private string _searchTerm = "";
+    private string _selectedCategory = "";
+
+    // KPI Aggregations
+    private int _totalQuantity;
+    private decimal _totalValuation;
+    private decimal _avgUnitCost;
+
+    private ApexChartOptions<StockMovementTypeDto> _movementChartOptions = new()
+    {
+        Chart = new Chart { Background = "transparent", Toolbar = new Toolbar { Show = false } },
+        Theme = new Theme { Mode = Mode.Dark },
+        Colors = ["#6366f1", "#ef4444"],
+        Grid = new Grid { BorderColor = "rgba(255,255,255,0.06)", StrokeDashArray = 3 },
+        PlotOptions = new PlotOptions { Bar = new PlotOptionsBar { BorderRadius = 5, ColumnWidth = "55%", Distributed = true } },
+        Xaxis = new XAxis { Labels = new XAxisLabels { Style = new AxisLabelStyle { Colors = "#94a3b8", FontSize = "11px" } } },
+        Yaxis = [new YAxis { Labels = new YAxisLabels { Style = new AxisLabelStyle { Colors = "#94a3b8", FontSize = "11px" } } }],
+        Tooltip = new Tooltip { Theme = Mode.Dark },
+        Legend = new Legend { Show = false }
+    };
+
+    private ApexChartOptions<MonthlyStockDto> _monthlyStockChartOptions = new()
+    {
+        Chart = new Chart { Background = "transparent", Toolbar = new Toolbar { Show = false } },
+        Theme = new Theme { Mode = Mode.Dark, Palette = PaletteType.Palette2 },
+        Stroke = new Stroke { Curve = Curve.Smooth, Width = [2, 2, 2, 2] },
+        Fill = new Fill
+        {
+            Type = [FillType.Gradient],
+            Gradient = new FillGradient
+            {
+                ShadeIntensity = 0.3,
+                OpacityFrom = 0.5,
+                OpacityTo = 0.05,
+                Stops = [0, 90, 100]
+            }
+        },
+        Colors = ["#6366f1", "#06b6d4", "#10b981", "#ef4444"],
+        Grid = new Grid { BorderColor = "rgba(255,255,255,0.06)", StrokeDashArray = 3 },
+        Xaxis = new XAxis { Type = XAxisType.Category, Labels = new XAxisLabels { Style = new AxisLabelStyle { Colors = "#94a3b8", FontSize = "11px" } } },
+        Yaxis = [new YAxis { Labels = new YAxisLabels { Style = new AxisLabelStyle { Colors = "#94a3b8", FontSize = "11px" } } }],
+        Legend = new Legend { Labels = new LegendLabels { Colors = "#cbd5e1" } },
+        Tooltip = new Tooltip { Theme = Mode.Dark }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tasks = new Task[]
+        {
+            LoadStockProducts(),
+            LoadMovementTypes(),
+            LoadMonthlyStock()
+        };
+        await Task.WhenAll(tasks);
+        CalculateKPIs();
+        _loading = false;
+    }
+
+    private async Task LoadStockProducts()
+    {
+        var data = await DashboardSvc.GetStockOverviewAsync();
+        _stockProducts = data ?? [];
+        _categories = _stockProducts.Select(p => p.CategoryName).Where(c => !string.IsNullOrEmpty(c)).Distinct().OrderBy(c => c).ToList();
+    }
+
+    private async Task LoadMovementTypes()
+    {
+        var data = await DashboardSvc.GetStockByMovementTypeAsync();
+        _movementTypeData = data ?? [];
+    }
+
+    private async Task LoadMonthlyStock()
+    {
+        var data = await DashboardSvc.GetStockByMonthAsync();
+        _monthlyStockData = data ?? [];
+    }
+
+    private void CalculateKPIs()
+    {
+        _totalQuantity = _stockProducts.Sum(p => p.TotalQuantity);
+        _totalValuation = _stockProducts.Sum(p => p.TotalQuantity * p.AvgCost);
+        _avgUnitCost = _stockProducts.Any() ? _stockProducts.Average(p => p.AvgCost) : 0;
+    }
+
+    private List<StockProductDto> GetFilteredProducts()
+    {
+        return _stockProducts
+            .Where(p => (string.IsNullOrEmpty(_selectedCategory) || p.CategoryName == _selectedCategory) &&
+                        (string.IsNullOrEmpty(_searchTerm) || p.ProductName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+    private static string FormatCurrency(decimal value)
+    {
+        if (value >= 1_000_000) return $"{(value / 1_000_000):F2}M TND";
+        if (value >= 1_000) return $"{(value / 1_000):F1}K TND";
+        return $"{value.ToString("N0", new CultureInfo("fr-FR"))} TND";
+    }
+
+    private static string FormatNumber(int value)
+    {
+        if (value >= 1_000_000) return $"{(value / 1_000_000.0):F1}M";
+        if (value >= 1_000) return $"{(value / 1_000.0):F1}K";
+        return value.ToString("N0", CultureInfo.InvariantCulture);
+    }
+
+    private static string GetBriefMonthName(string monthName)
+    {
+        return monthName.ToLower() switch
+        {
+            "janvier" => "Jan",
+            "février" => "Fév",
+            "mars" => "Mar",
+            "avril" => "Avr",
+            "mai" => "Mai",
+            "juin" => "Juin",
+            "juillet" => "Juil",
+            "août" => "Aoû",
+            "septembre" => "Sep",
+            "octobre" => "Oct",
+            "novembre" => "Nov",
+            "décembre" => "Déc",
+            _ => monthName.Length > 3 ? monthName.Substring(0, 3) : monthName
+        };
+    }
+}

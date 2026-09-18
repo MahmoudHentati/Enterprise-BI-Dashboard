@@ -1,0 +1,609 @@
+@page "/"
+@rendermode InteractiveServer
+@inject DashboardService DashboardSvc
+@using System.Globalization
+@using System.Linq
+
+<PageTitle>Dashboard — EnterpriseCube</PageTitle>
+
+@if (_loading)
+{
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <span class="loading-text">Chargement des données...</span>
+    </div>
+}
+else
+{
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+        <div class="kpi-card kpi-revenue">
+            <div class="kpi-header">
+                <span class="kpi-label">Chiffre d'Affaires</span>
+                <div class="kpi-icon">💰</div>
+            </div>
+            <div class="kpi-value">@FormatCurrency(_overview?.TotalRevenue ?? 0)</div>
+            <div class="kpi-sub">Total des ventes</div>
+        </div>
+
+        <div class="kpi-card kpi-paid">
+            <div class="kpi-header">
+                <span class="kpi-label">Montant Payé</span>
+                <div class="kpi-icon">✅</div>
+            </div>
+            <div class="kpi-value">@FormatCurrency(_overview?.TotalPaid ?? 0)</div>
+            <div class="kpi-sub">Dont impayé: @FormatCurrency(_overview?.UnpaidAmount ?? 0)</div>
+        </div>
+
+        <div class="kpi-card kpi-rate">
+            <div class="kpi-header">
+                <span class="kpi-label">Taux de Collecte</span>
+                <div class="kpi-icon">📊</div>
+            </div>
+            <div class="kpi-value">@((_overview?.PaymentRate ?? 0).ToString("F1"))%</div>
+            <div class="kpi-sub">Taux de paiement</div>
+        </div>
+
+        <div class="kpi-card kpi-orders">
+            <div class="kpi-header">
+                <span class="kpi-label">Commandes</span>
+                <div class="kpi-icon">🛒</div>
+            </div>
+            <div class="kpi-value">@FormatNumber(_overview?.TotalOrders ?? 0)</div>
+            <div class="kpi-sub">@FormatNumber(_overview?.TotalQuantity ?? 0) articles</div>
+        </div>
+    </div>
+
+    <!-- Revenue Trend -->
+    <div class="chart-card" style="margin-bottom:1rem">
+        <div class="chart-header">
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+                <span class="chart-title">📊 Chiffre d'Affaires Mensuel</span>
+                <span class="chart-badge badge-blue">Tendance</span>
+            </div>
+            <select class="period-dropdown" @onchange="OnMonthChanged">
+                <option value="0" selected="@(_selectedMonth == 0)">📅 Tous les mois</option>
+                @foreach (var mo in _availableMonths)
+                {
+                    <option value="@mo.Month" selected="@(_selectedMonth == mo.Month)">@mo.MonthName</option>
+                }
+            </select>
+        </div>
+        @if (_filteredMonthlyData.Any())
+        {
+            <div @key="_chartKey">
+                <ApexChart TItem="MonthlyRevenueDto"
+                           Options="@_revenueChartOptions"
+                           Height="260">
+                    <ApexPointSeries TItem="MonthlyRevenueDto"
+                        Items="@_filteredMonthlyData"
+                        Name="Chiffre d'Affaires"
+                        XValue="@(e => GetBriefMonthName(e.MonthName))"
+                        YValue="@(e => (decimal)e.Revenue)"
+                        SeriesType="SeriesType.Bar" />
+                    <ApexPointSeries TItem="MonthlyRevenueDto"
+                        Items="@_filteredMonthlyData"
+                        Name="Montant Payé"
+                        XValue="@(e => GetBriefMonthName(e.MonthName))"
+                        YValue="@(e => (decimal)e.Paid)"
+                        SeriesType="SeriesType.Line" />
+                </ApexChart>
+            </div>
+        }
+        else
+        {
+            <div class="no-data">Aucune donnée pour cette période</div>
+        }
+    </div>
+
+    <!-- Category Donut — full width -->
+    <div class="chart-card" style="margin-bottom:1rem">
+        <div class="chart-header">
+            <span class="chart-title">🥧 Répartition par Catégorie</span>
+            <span class="chart-badge badge-violet">Distribution</span>
+        </div>
+        @if (_categoryData.Any())
+        {
+            <ApexChart TItem="CategorySalesDto"
+                       Options="@_categoryChartOptions"
+                       Height="320">
+                <ApexPointSeries TItem="CategorySalesDto"
+                    Items="@_categoryData"
+                    Name="Chiffre d'Affaires"
+                    XValue="@(e => e.CategoryName)"
+                    YValue="@(e => e.Revenue)"
+                    SeriesType="SeriesType.Donut" />
+            </ApexChart>
+        }
+        else
+        {
+            <div class="no-data">Aucune donnée</div>
+        }
+    </div>
+
+    <!-- Top Products + Customer Segments -->
+    <div class="charts-grid charts-grid-3" style="margin-bottom:1rem">
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">🏆 Top 10 Produits</span>
+                <span class="chart-badge badge-green">Meilleures ventes</span>
+            </div>
+            @if (_topProducts.Any())
+            {
+                <div style="overflow-y:auto; max-height:280px;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Produit</th>
+                                <th style="text-align:right">Ventes</th>
+                                <th style="text-align:right">Qté</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{
+                                var maxRev = _topProducts.Max(p => p.Revenue);
+                                var barColors = new[] { "bar-blue","bar-indigo","bar-purple","bar-pink","bar-red","bar-orange","bar-yellow","bar-green","bar-cyan","bar-teal" };
+                            }
+                            @for (int i = 0; i < _topProducts.Count; i++)
+                            {
+                                var p = _topProducts[i];
+                                var pct = maxRev > 0 ? (double)p.Revenue / (double)maxRev * 100 : 0;
+                                <tr>
+                                    <td class="table-rank">@(i+1)</td>
+                                    <td>
+                                        <div class="product-name">@p.ProductName</div>
+                                        <div class="progress-bar-container">
+                                            <div class="progress-bar">
+                                                <div class="progress-bar-fill @barColors[i % barColors.Length]" style="width:@pct.ToString("F0")%"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="table-value">@FormatCurrency(p.Revenue)</td>
+                                    <td class="table-value">@p.Quantity</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">💎 Segments Clients</span>
+                <span class="chart-badge badge-cyan">VIP / Standard</span>
+            </div>
+            <div class="segment-grid">
+                @foreach (var seg in _customerSegments)
+                {
+                    if (string.Equals(seg.CategoryCode, "Unknown", StringComparison.OrdinalIgnoreCase)) continue;
+                    var cls = seg.CategoryCode?.ToUpper() == "VIP" ? "segment-vip" : "segment-regular";
+                    <div class="segment-card @cls">
+                        <div class="segment-code">@(seg.CategoryCode ?? "N/A")</div>
+                        <div class="segment-revenue">@FormatCurrency(seg.Revenue)</div>
+                        <div class="segment-orders">@seg.Orders cmdes</div>
+                    </div>
+                }
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Top Villes - full width -->
+    <div class="chart-card" style="margin-bottom:1rem">
+        <div class="chart-header">
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+                <span class="chart-title">🏙️ Top Villes par Chiffre d'Affaires</span>
+                <span class="chart-badge badge-cyan">@_cityData.Count villes • Géographie</span>
+            </div>
+            <div class="toggle-container">
+                <button class="toggle-btn @(_showCityChart ? "active" : "")" @onclick="() => _showCityChart = true">📊 Graphique</button>
+                <button class="toggle-btn @(!_showCityChart ? "active" : "")" @onclick="() => _showCityChart = false">📋 Liste</button>
+            </div>
+        </div>
+        
+        @if (_showCityChart)
+        {
+            @if (_cityData.Any())
+            {
+                <ApexChart TItem="CitySalesDto"
+                           Options="@_cityChartOptions"
+                           Height="280">
+                    <ApexPointSeries TItem="CitySalesDto"
+                                     Items="@_cityData"
+                                     Name="Chiffre d'Affaires"
+                                     XValue="@(e => e.City)"
+                                     YValue="@(e => (decimal)e.Revenue)"
+                                     SeriesType="SeriesType.Bar" />
+                </ApexChart>
+            }
+            else
+            {
+                <div class="no-data">Aucune donnée</div>
+            }
+        }
+        else
+        {
+            <div class="cities-grid">
+                @{
+                    var maxCityRev = _cityData.Any() ? (double)_cityData.Max(ct => ct.Revenue) : 1.0;
+                    var cityColors = new[] { "bar-blue","bar-indigo","bar-purple","bar-pink","bar-red","bar-orange","bar-yellow","bar-green","bar-cyan","bar-teal" };
+                }
+                @for (int i = 0; i < _cityData.Count; i++)
+                {
+                    var c = _cityData[i];
+                    var pct = maxCityRev > 0 ? (double)c.Revenue / maxCityRev * 100 : 0;
+                    <div class="city-item">
+                        <div class="city-rank-name">
+                            <span class="city-rank">@(i+1)</span>
+                            <span class="city-name">@c.City</span>
+                        </div>
+                        <div class="city-bar-wrap">
+                            <div class="progress-bar">
+                                <div class="progress-bar-fill @cityColors[i % cityColors.Length]" style="width:@(pct.ToString("F0"))%"></div>
+                            </div>
+                        </div>
+                        <span class="city-value">@FormatCurrency(c.Revenue)</span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- Payment Status & Methods -->
+    <div class="charts-grid charts-grid-2">
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">💳 Statut des Paiements</span>
+                <span class="chart-badge badge-blue">Distribution</span>
+            </div>
+            @if (_paymentStatus.Any())
+            {
+                <ApexChart TItem="PaymentStatusDto"
+                           Options="@_paymentChartOptions"
+                           Height="360">
+                    <ApexPointSeries TItem="PaymentStatusDto"
+                        Items="@_paymentStatus"
+                        Name="Montant (TND)"
+                        XValue="@(e => e.Status ?? "N/A")"
+                        YValue="@(e => e.Amount)"
+                        SeriesType="SeriesType.Bar" />
+                </ApexChart>
+            }
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <span class="chart-title">💰 Méthodes de Paiement</span>
+                <span class="chart-badge badge-green">Modes utilisés</span>
+            </div>
+            @if (_paymentMethods.Any())
+            {
+                <div class="pm-summary">
+                    <div class="pm-summary-item">
+                        <span class="pm-summary-label">Total Montant</span>
+                        <span class="pm-summary-value">@FormatCurrency(_pmTotalAmount)</span>
+                    </div>
+                    <div class="pm-summary-item">
+                        <span class="pm-summary-label">Total Commandes</span>
+                        <span class="pm-summary-value">@_pmTotalCount</span>
+                    </div>
+                </div>
+                <div class="pm-list">
+                    @for (int i = 0; i < _paymentMethods.Count; i++)
+                    {
+                        var m = _paymentMethods[i];
+                        var pctAmount = _pmTotalAmount > 0 ? (double)m.Amount / (double)_pmTotalAmount * 100 : 0;
+                        var pctCount = _pmTotalCount > 0 ? (double)m.Count / (double)_pmTotalCount * 100 : 0;
+                        var color = _pmColors[i % _pmColors.Length];
+                        var icon = _pmIcons[i % _pmIcons.Length];
+                        var bgColor = color + "20";
+                        var barColor2 = color + "99";
+                        <div class="pm-item">
+                            <div class="pm-item-header">
+                                <div class="pm-icon" style="background: @bgColor; color: @color;">@icon</div>
+                                <div class="pm-name">@m.MethodName</div>
+                                <div class="pm-amount">@FormatCurrency(m.Amount)</div>
+                            </div>
+                            <div class="pm-bars">
+                                <div class="pm-bar-row">
+                                    <span class="pm-bar-label">Montant</span>
+                                    <div class="pm-bar-track">
+                                        <div class="pm-bar-fill" style="width:@(pctAmount.ToString("F1"))%; background:@color;"></div>
+                                    </div>
+                                    <span class="pm-bar-pct">@(pctAmount.ToString("F1"))%</span>
+                                </div>
+                                <div class="pm-bar-row">
+                                    <span class="pm-bar-label">Volume</span>
+                                    <div class="pm-bar-track">
+                                        <div class="pm-bar-fill" style="width:@(pctCount.ToString("F1"))%; background:@barColor2;"></div>
+                                    </div>
+                                    <span class="pm-bar-pct">@m.Count cmdes</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="no-data">Aucune donnée</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private bool _showCityChart = true;
+    private SalesOverviewDto? _overview;
+    private List<MonthlyRevenueDto> _monthlyData = [];
+    private List<MonthlyRevenueDto> _filteredMonthlyData = [];
+    private List<CategorySalesDto> _categoryData = [];
+    private List<ProductSalesDto> _topProducts = [];
+    private List<CustomerSegmentDto> _customerSegments = [];
+    private List<CitySalesDto> _cityData = [];
+    private List<PaymentStatusDto> _paymentStatus = [];
+    private List<PaymentMethodDto> _paymentMethods = [];
+    private List<MonthlyRevenueDto> _availableMonths = [];
+    private int _selectedMonth = 0; // 0 = All
+    private int _chartKey = 0; // Force re-render key
+
+    // Payment methods computed values (avoid @{} inside @if)
+    private decimal _pmTotalAmount => _paymentMethods.Sum(m => m.Amount);
+    private int _pmTotalCount => _paymentMethods.Sum(m => m.Count);
+    private static readonly string[] _pmColors = ["#6366f1", "#06b6d4", "#a855f7", "#10b981", "#f59e0b", "#ec4899"];
+    private static readonly string[] _pmIcons = ["💳", "🏦", "📝", "💵", "📱", "🔄"];
+
+    private ApexChartOptions<CitySalesDto> _cityChartOptions = new()
+    {
+        Chart = new Chart
+        {
+            Background = "transparent",
+            Toolbar = new Toolbar { Show = false },
+            Zoom = new Zoom { Enabled = false }
+        },
+        Theme = new Theme { Mode = Mode.Dark },
+        Colors = ["#3b82f6", "#4f46e5", "#7c3aed", "#db2777", "#dc2626", "#ea580c", "#ca8a04", "#10b981", "#06b6d4", "#14b8a6"],
+        PlotOptions = new PlotOptions
+        {
+            Bar = new PlotOptionsBar
+            {
+                Horizontal = true,
+                BorderRadius = 4,
+                BarHeight = "55%",
+                Distributed = true
+            }
+        },
+        Grid = new Grid { BorderColor = "rgba(255,255,255,0.06)", StrokeDashArray = 3 },
+        Xaxis = new XAxis { Labels = new XAxisLabels { Style = new AxisLabelStyle { Colors = "#cbd5e1", FontSize = "11px" } } },
+        Yaxis = [new YAxis { Labels = new YAxisLabels { Style = new AxisLabelStyle { Colors = "#cbd5e1", FontSize = "12px" } } }],
+        Legend = new Legend { Show = false },
+        Tooltip = new Tooltip
+        {
+            Theme = Mode.Dark,
+            Y = new TooltipY { Formatter = "function(val){ if(val>=1000000) return (val/1000000).toFixed(2)+' M TND'; if(val>=1000) return (val/1000).toFixed(2)+' K TND'; return val.toFixed(2)+' TND'; }" }
+        }
+    };
+
+    private ApexChartOptions<MonthlyRevenueDto> _revenueChartOptions = new()
+    {
+        Chart = new Chart
+        {
+            Background = "transparent",
+            Toolbar = new Toolbar { Show = false },
+            Zoom = new Zoom { Enabled = false }
+        },
+        Theme = new Theme { Mode = Mode.Dark },
+        Colors = ["#6366f1", "#ec4899"],
+        Stroke = new Stroke { Curve = Curve.Smooth, Width = [0, 3] },
+        Fill = new Fill
+        {
+            Type = [FillType.Solid, FillType.Solid],
+            Opacity = [0.85, 1.0]
+        },
+        Grid = new Grid { BorderColor = "rgba(255,255,255,0.06)", StrokeDashArray = 3 },
+        Xaxis = new XAxis { Type = XAxisType.Category, Labels = new XAxisLabels { Style = new AxisLabelStyle { Colors = "#cbd5e1", FontSize = "12px" } } },
+        Yaxis = [new YAxis { Labels = new YAxisLabels { Style = new AxisLabelStyle { Colors = "#cbd5e1", FontSize = "12px" } } }],
+        Legend = new Legend { Position = LegendPosition.Top, Labels = new LegendLabels { Colors = "#cbd5e1" } },
+        PlotOptions = new PlotOptions { Bar = new PlotOptionsBar { ColumnWidth = "60%", BorderRadius = 4 } },
+        Tooltip = new Tooltip { Theme = Mode.Dark }
+    };
+
+    private ApexChartOptions<CategorySalesDto> _categoryChartOptions = new()
+    {
+        Chart = new Chart { Background = "transparent", Toolbar = new Toolbar { Show = false } },
+        Theme = new Theme { Mode = Mode.Dark, Palette = PaletteType.Palette4 },
+        Colors = ["#6366f1", "#a855f7", "#06b6d4", "#10b981", "#f59e0b", "#ef4444", "#ec4899"],
+        Legend = new Legend
+        {
+            Position = LegendPosition.Right,
+            Labels = new LegendLabels { Colors = "#cbd5e1" },
+            FontSize = "13px"
+        },
+        PlotOptions = new PlotOptions
+        {
+            Pie = new PlotOptionsPie
+            {
+                Donut = new PlotOptionsDonut
+                {
+                    Size = "60%",
+                    Labels = new DonutLabels
+                    {
+                        Show = true,
+                        Total = new DonutLabelTotal
+                        {
+                            Show = true,
+                            Label = "Total",
+                            Color = "#cbd5e1",
+                            Formatter = "function(w){ var s=w.globals.seriesTotals.reduce(function(a,b){return a+b},0); return (s/1000000).toFixed(2)+'M'; }"
+                        }
+                    }
+                }
+            }
+        },
+        Tooltip = new Tooltip
+        {
+            Theme = Mode.Dark,
+            Y = new TooltipY { Formatter = "function(val){ if(val>=1000000) return (val/1000000).toFixed(2)+' M TND'; if(val>=1000) return (val/1000).toFixed(2)+' K TND'; return val.toFixed(2)+' TND'; }" }
+        },
+        DataLabels = new DataLabels
+        {
+            Formatter = "function(val){ return val.toFixed(2)+'%'; }"
+        }
+    };
+
+    private ApexChartOptions<PaymentStatusDto> _paymentChartOptions = new()
+    {
+        Chart = new Chart { Background = "transparent", Toolbar = new Toolbar { Show = false } },
+        Theme = new Theme { Mode = Mode.Dark },
+        Colors = ["#10b981", "#ef4444", "#f59e0b", "#6b7280"], // Green (Paid), Red (Overdue)
+        PlotOptions = new PlotOptions
+        {
+            Bar = new PlotOptionsBar
+            {
+                Horizontal = false,
+                BorderRadius = 6,
+                ColumnWidth = "40%",
+                Distributed = true
+            }
+        },
+        Grid = new Grid { BorderColor = "rgba(255,255,255,0.06)", StrokeDashArray = 3 },
+        Xaxis = new XAxis { Type = XAxisType.Category, Labels = new XAxisLabels { Style = new AxisLabelStyle { Colors = "#cbd5e1", FontSize = "11px" } } },
+        Yaxis = [new YAxis { Labels = new YAxisLabels { Style = new AxisLabelStyle { Colors = "#cbd5e1", FontSize = "11px" } } }],
+        Legend = new Legend { Show = false }, // Hidden since X-axis shows the category and count directly
+        Tooltip = new Tooltip
+        {
+            Theme = Mode.Dark,
+            Y = new TooltipY { Formatter = "function(val){ if(val>=1000000) return (val/1000000).toFixed(2)+' M TND'; if(val>=1000) return (val/1000).toFixed(2)+' K TND'; return val.toFixed(2)+' TND'; }" }
+        }
+    };
+
+    private ApexChartOptions<PaymentMethodDto> _paymentMethodChartOptions = new()
+    {
+        Chart = new Chart { Background = "transparent", Toolbar = new Toolbar { Show = false } },
+        Theme = new Theme { Mode = Mode.Dark },
+        Colors = ["#6366f1", "#06b6d4", "#a855f7", "#10b981"],
+        Legend = new Legend { Position = LegendPosition.Bottom, Labels = new LegendLabels { Colors = "#cbd5e1" } },
+        Tooltip = new Tooltip { Theme = Mode.Dark }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tasks = new Task[]
+        {
+            LoadOverview(),
+            LoadMonthly(),
+            LoadCategory(),
+            LoadTopProducts(),
+            LoadSegments(),
+            LoadCities(),
+            LoadPaymentStatus(),
+            LoadPaymentMethods()
+        };
+        await Task.WhenAll(tasks);
+
+        // Filter out zero-value months and build month list for period selector
+        if (_monthlyData.Any())
+        {
+            _monthlyData = _monthlyData.Where(m => m.Revenue > 0 || m.Paid > 0).ToList();
+            _availableMonths = _monthlyData
+                .GroupBy(m => m.Month)
+                .Select(g => g.First())
+                .OrderBy(m => m.Month)
+                .ToList();
+            _filteredMonthlyData = _monthlyData;
+            UpdateRevenueYAxis();
+        }
+
+        _loading = false;
+    }
+
+    private async Task LoadOverview() => _overview = await DashboardSvc.GetSalesOverviewAsync();
+    private async Task LoadMonthly() => _monthlyData = await DashboardSvc.GetSalesByMonthAsync();
+    private async Task LoadCategory() => _categoryData = await DashboardSvc.GetSalesByCategoryAsync();
+    private async Task LoadTopProducts() => _topProducts = await DashboardSvc.GetTopProductsAsync();
+    private async Task LoadSegments() => _customerSegments = await DashboardSvc.GetCustomerSegmentsAsync();
+    private async Task LoadCities() => _cityData = await DashboardSvc.GetSalesByCityAsync();
+    private async Task LoadPaymentStatus()
+    {
+        var rawData = await DashboardSvc.GetPaymentStatusAsync();
+        _paymentStatus = rawData.Select(p => new PaymentStatusDto
+        {
+            Status = $"{p.Status} ({p.Count} cmdes)",
+            Count = p.Count,
+            Amount = p.Amount
+        }).ToList();
+    }
+    private async Task LoadPaymentMethods() => _paymentMethods = await DashboardSvc.GetPaymentMethodsAsync();
+
+    private static string FormatCurrency(decimal value)
+    {
+        if (value >= 1_000_000) return $"{(value / 1_000_000):F2}M TND";
+        if (value >= 1_000) return $"{(value / 1_000):F2}K TND";
+        return $"{value:F2} TND";
+    }
+
+    private static string FormatNumber(int value)
+    {
+        if (value >= 1_000_000) return $"{(value / 1_000_000.0):F2}M";
+        if (value >= 1_000) return $"{(value / 1_000.0):F2}K";
+        return value.ToString("N0", CultureInfo.InvariantCulture);
+    }
+
+    private static string GetStatusColor(string? status) => status?.ToUpper() switch
+    {
+        "PAID" => "#10b981",
+        "PENDING" => "#f59e0b",
+        "OVERDUE" => "#ef4444",
+        "CANCELLED" => "#6b7280",
+        _ => "#6366f1"
+    };
+
+    private static string GetBriefMonthName(string monthName)
+    {
+        return monthName.ToLower() switch
+        {
+            "janvier" => "Jan",
+            "février" => "Fév",
+            "mars" => "Mar",
+            "avril" => "Avr",
+            "mai" => "Mai",
+            "juin" => "Juin",
+            "juillet" => "Juil",
+            "août" => "Aoû",
+            "septembre" => "Sep",
+            "octobre" => "Oct",
+            "novembre" => "Nov",
+            "décembre" => "Déc",
+            _ => monthName.Length > 3 ? monthName.Substring(0, 3) : monthName
+        };
+    }
+
+    private void OnMonthChanged(ChangeEventArgs e)
+    {
+        _selectedMonth = int.Parse(e.Value?.ToString() ?? "0");
+        _filteredMonthlyData = _selectedMonth == 0
+            ? _monthlyData
+            : _monthlyData.Where(m => m.Month == _selectedMonth).ToList();
+        _chartKey++; // Force ApexChart to fully re-render
+        UpdateRevenueYAxis();
+    }
+
+    private void UpdateRevenueYAxis()
+    {
+        if (_filteredMonthlyData.Any())
+        {
+            var maxRev = (double)_filteredMonthlyData.Max(m => m.Revenue);
+            _revenueChartOptions.Yaxis = [new YAxis
+            {
+                ForceNiceScale = true,
+                DecimalsInFloat = 0,
+                Max = maxRev * 1.15,
+                Labels = new YAxisLabels { Style = new AxisLabelStyle { Colors = "#cbd5e1", FontSize = "11px" } }
+            }];
+        }
+    }
+}
+
